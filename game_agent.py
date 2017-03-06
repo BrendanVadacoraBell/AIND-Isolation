@@ -7,7 +7,7 @@ You must test your agent's strength against a set of agents with known
 relative strength using tournament.py and include the results in your report.
 """
 import random
-
+import math
 
 class Timeout(Exception):
     """Subclass base exception for code clarity."""
@@ -38,7 +38,135 @@ def custom_score(game, player):
     """
 
     # TODO: finish this function!
-    raise NotImplementedError
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    reflect_score = reflect(game, player)
+    attack_opponent_score = attack_opponent(game, player)
+    survive_score = survive(game, player)
+
+    return survive_score
+
+def reflect(game, player):
+    """
+    Heuristic prioritising the reflection of the opponent
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    #Get opponent position
+    opponent_position = game.get_player_location(game.get_opponent(player))
+    #Get the legal moves for the current player
+    legal_moves = game.get_legal_moves(player)
+    #Get the reflecting move of the the opponent
+    reflect_opponent = (game.height-opponent_position[0]-1, game.width-opponent_position[1]-1)
+    #If the reflecting move is legal return infinity to prioritise this move
+    if reflect_opponent in legal_moves:
+        return float("inf")
+    return float(game.utility(player))
+
+def attack_opponent(game, player):
+    """
+    Heuristic prioritising the moves that contain future moves common to the
+    opponents legal moves.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    #Get opponent moves
+    opponent_moves = game.get_legal_moves(game.get_opponent(player))
+    #Get legal moves for the current player
+    legal_moves = game.get_legal_moves(player)
+    #Get the current utility, then use common moves as a bonus
+    count = game.utility(player)
+    for move in legal_moves:
+        if move in opponent_moves:
+            count += 1
+    return float(count)
+
+def survive(game, player):
+    """
+    Heuristic prioritising survival by staying on the side/quadrant
+    with the most open blocks.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    #get the current board
+    board_state = game.__board_state__
+    #get the mid point to determine the different quadrants
+    middlex = math.floor((game.width-1)/2)
+    middley = math.floor((game.height-1)/2)
+    left_section = 0
+    right_section = 0
+    top_section = 0
+    bottom_section = 0
+    #for each row and col in row determine the number of used block in each quadrant
+    for idx, row in enumerate(board_state):
+        for idxC, col in enumerate(row):
+            if col > 0:
+                if idxC < middlex:
+                    left_section+=1
+                else:
+                    right_section+=1
+                if idx < middley:
+                    top_section+=1
+                else:
+                    bottom_section+=1
+    """Get the current player location and determine which is the best
+       quadrant by returning the section with minimum number of used blocks.
+    """
+    player_location = game.get_player_location(player)
+    if player_location[0] < middlex:
+        if player_location[1] < middley:
+            return float(min(left_section, top_section))
+        else:
+            return float(min(left_section, bottom_section))
+    else:
+        if player_location[1] < middley:
+            return float(min(right_section, top_section))
+        else:
+            return float(min(right_section, bottom_section))
+                
 
 
 class CustomPlayer:
@@ -132,11 +260,13 @@ class CustomPlayer:
             # here in order to avoid timeout. The try/except block will
             # automatically catch the exception raised by the search method
             # when the timer gets close to expiring
+
+            #if iterative follow the logic of increasing the depth at each iteration
             if self.iterative:
                 depth = 0
                 while True:
                     if self.method == 'minimax':
-                        score, move = self.minimax(game, depth)
+                       score, move = self.minimax(game, depth)
                     else:
                        score,move = self.alphabeta(game, depth)
 
@@ -148,6 +278,7 @@ class CustomPlayer:
                     score,move = self.alphabeta(game, self.search_depth)
         except Timeout:
             # Handle any actions required at timeout, if necessary
+            #Return the most recent best move
             return move
 
         # Return the best move from the last completed search iteration
@@ -155,6 +286,16 @@ class CustomPlayer:
 
     def minimax(self, game, depth, maximizing_player=True):
         """Implement the minimax search algorithm as described in the lectures.
+
+           function MINIMAX-DECISION(state) returns an action
+             return arg max a ∈ ACTIONS(s) MIN-VALUE(RESULT(state, a))
+
+            aimacode (2017).
+            Minimax-Decision
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
 
         Parameters
         ----------
@@ -184,16 +325,23 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
-            
+        #Throw timeout            
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
+        #Test for terminal leaf node
         if self.terminal_test(game, depth):
             return self.score(game, self), game.get_player_location(self)
 
+        #init with invalid move and worst score
         final_score = float("-inf")
         final_move = (-1,-1)
         try:
+            #get the legal moves
             legal_moves = game.get_legal_moves()
+            """for each move get the result of minimax min for
+               a decreasing depth. If the result is better than the previous
+               best, assign the best as the result.
+            """
             for move in legal_moves:
                 result = self.minimax_min(game.forecast_move(move), depth-1)
                 if result[0] > final_score:
@@ -207,14 +355,65 @@ class CustomPlayer:
 
 
     def minimax_min(self, game, depth):
+        """Implement the minimax search algorithm as described in the lectures.
+
+            function MIN-VALUE(state) returns a utility value
+             if TERMINAL-TEST(state) the return UTILITY(state)
+             v ← ∞
+             for each a in ACTIONS(state) do
+               v ← MIN(v, MAX-VALUE(RESULT(state, a)))
+             return v
+
+          aimacode (2017).
+            Minimax-Decision
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        maximizing_player : bool
+            Flag indicating whether the current search depth corresponds to a
+            maximizing layer (True) or a minimizing layer (False)
+
+        Returns
+        -------
+        float
+            The score for the current search branch
+
+        tuple(int, int)
+            The best move for the current branch; (-1, -1) for no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project unit tests; you cannot call any other
+                evaluation function directly.
+        """
+        #Raise timeout
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
+        #check for terminal leaf node
         if self.terminal_test(game, depth):
             return self.score(game, self), game.get_player_location(self)
+        #set invalid move and best possible score
         score = float("inf")
         move = (-1,-1)
         legal_moves = game.get_legal_moves()
         for m in legal_moves:
+            """for each move get the result of minimax max for
+               a decreasing depth. If the result is better than the previous
+               best, assign the best as the result.
+            """
             result = self.minimax_max(game.forecast_move(m), depth-1)
             if result[0] < score:
                 score = result[0]
@@ -223,21 +422,76 @@ class CustomPlayer:
         return score, move
 
     def minimax_max(self, game, depth):
+        """Implement the minimax search algorithm as described in the lectures.
+
+              function MAX-VALUE(state) returns a utility value
+             if TERMINAL-TEST(state) the return UTILITY(state)
+             v ← −∞
+             for each a in ACTIONS(state) do
+               v ← MAX(v, MIN-VALUE(RESULT(state, a)))
+             return v
+
+          aimacode (2017).
+            Minimax-Decision
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        maximizing_player : bool
+            Flag indicating whether the current search depth corresponds to a
+            maximizing layer (True) or a minimizing layer (False)
+
+        Returns
+        -------
+        float
+            The score for the current search branch
+
+        tuple(int, int)
+            The best move for the current branch; (-1, -1) for no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project unit tests; you cannot call any other
+                evaluation function directly.
+        """
+        #raise timeout
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
+        #check for terminal leaf node
         if self.terminal_test(game, depth):
             return self.score(game, self), game.get_player_location(self)
+        #set the worst move and score
         score = float("-inf")
         move = (-1, -1)
         legal_moves = game.get_legal_moves()
         for m in legal_moves:
+            """for each move get the result of minimax max for
+               a decreasing depth. If the result is better than the previous
+               best, assign the best as the result.
+            """
             result = self.minimax_min(game.forecast_move(m), depth-1)
             if result[0] > score:
                 score = result[0]
                 move = m
         return score, move
-                        
+
     def terminal_test(self, game, depth):
+        """
+            If the number of legal moves is 0 or the depth is zero
+            treat the node as a terminal leaf node
+        """
         if len(game.get_legal_moves()) == 0 or depth == 0:
             return True
         return False
@@ -245,6 +499,17 @@ class CustomPlayer:
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player=True):
         """Implement minimax search with alpha-beta pruning as described in the
         lectures.
+
+        function ALPHA-BETA-SEARCH(state) returns an action
+         v ← MAX-VALUE(state, −∞, +∞)
+         return the action in ACTIONS(state) with value v
+
+            aimacode (2017).
+             ALPHA-BETA-SEARCH
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
 
         Parameters
         ----------
@@ -280,26 +545,87 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
+        #raise timeout
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
         
-        # TODO: finish this function!
+        # Set the worst move and score
         final_score = float("-inf")
         final_move = (-1,-1)
-        try:
-            return self.alphabeta_max(game, depth, alpha, beta)
-        except Timeout:
-            return final_score, final_move
+        #return the result of maximising alpha beta
+        return self.alphabeta_max(game, depth, alpha, beta)
         
 
     def alphabeta_min(self, game, depth, alpha, beta):
+        """Implement minimax search with alpha-beta pruning as described in the
+        lectures.
+
+         function MIN-VALUE(state, α, β) returns a utility value
+         if TERMINAL-TEST(state) the return UTILITY(state)
+         v ← +∞
+         for each a in ACTIONS(state) do
+           v ← MIN(v, MAX-VALUE(RESULT(state, a), α, β))
+           if v ≤ α then return v
+           β ← MIN(β, v)
+         return v
+
+            aimacode (2017).
+            ALPHA-BETA-SEARCH
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        alpha : float
+            Alpha limits the lower bound of search on minimizing layers
+
+        beta : float
+            Beta limits the upper bound of search on maximizing layers
+
+        maximizing_player : bool
+            Flag indicating whether the current search depth corresponds to a
+            maximizing layer (True) or a minimizing layer (False)
+
+        Returns
+        -------
+        float
+            The score for the current search branch
+
+        tuple(int, int)
+            The best move for the current branch; (-1, -1) for no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project unit tests; you cannot call any other
+                evaluation function directly.
+        """
+        #raise timeout
         if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
+            return self.score(game, self), game.get_player_location(self)
+        #check for terminal leaf node
         if self.terminal_test(game, depth):
             return self.score(game, self), game.get_player_location(self)
+        #set the worst move and best score
         score = float("inf")
         move = (-1,-1)
         legal_moves = game.get_legal_moves()
+        """for each move get the result of alphabeta_max for
+               a decreasing depth. If the result is better than the previous
+               best, assign the best as the result.
+
+               Update alpha and beta as described by the above algorithm
+        """
         for m in legal_moves:
             result = self.alphabeta_max(game.forecast_move(m), depth-1, alpha, beta)
             if result[0] < score:
@@ -312,13 +638,75 @@ class CustomPlayer:
         return score, move
 
     def alphabeta_max(self, game, depth, alpha, beta):
+        """Implement minimax search with alpha-beta pruning as described in the
+        lectures.
+
+         function MIN-VALUE(state, α, β) returns a utility value
+         if TERMINAL-TEST(state) the return UTILITY(state)
+         v ← +∞
+         for each a in ACTIONS(state) do
+           v ← MIN(v, MAX-VALUE(RESULT(state, a), α, β))
+           if v ≤ α then return v
+           β ← MIN(β, v)
+         return v
+
+            aimacode (2017).
+            ALPHA-BETA-SEARCH
+            [online] Github.
+            Available at:
+            https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
+           [Accessed 06 Mar. 2017].
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        alpha : float
+            Alpha limits the lower bound of search on minimizing layers
+
+        beta : float
+            Beta limits the upper bound of search on maximizing layers
+
+        maximizing_player : bool
+            Flag indicating whether the current search depth corresponds to a
+            maximizing layer (True) or a minimizing layer (False)
+
+        Returns
+        -------
+        float
+            The score for the current search branch
+
+        tuple(int, int)
+            The best move for the current branch; (-1, -1) for no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project unit tests; you cannot call any other
+                evaluation function directly.
+        """
+        #raise timeout
         if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
+            return self.score(game, self), game.get_player_location(self)
+        #check for terminal leaf node
         if self.terminal_test(game, depth):
             return self.score(game, self), game.get_player_location(self)
+        #set worst move and score
         score = float("-inf")
         move = (-1, -1)
         legal_moves = game.get_legal_moves()
+        """for each move get the result of alphabeta_max for
+               a decreasing depth. If the result is better than the previous
+               best, assign the best as the result.
+
+               Update alpha and beta as described by the above algorithm
+        """
         for m in legal_moves:
             result = self.alphabeta_min(game.forecast_move(m), depth-1, alpha, beta)
             if result[0] > score:
