@@ -45,10 +45,10 @@ def custom_score(game, player):
         return float("inf")
 
     reflect_score = reflect(game, player)
-    attack_opponent_score = attack_opponent(game, player)
-    survive_score = survive(game, player)
+    #attack_opponent_score = attack_opponent(game, player)
+    #survive_score = survive(game, player)
 
-    return survive_score
+    return reflect_score
 
 def reflect(game, player):
     """
@@ -355,7 +355,7 @@ class CustomPlayer:
 
 
     def minimax_min(self, game, depth):
-        """Implement the minimax search algorithm as described in the lectures.
+        """Implement the minimax minimising search algorithm as described in the lectures.
 
             function MIN-VALUE(state) returns a utility value
              if TERMINAL-TEST(state) the return UTILITY(state)
@@ -422,7 +422,7 @@ class CustomPlayer:
         return score, move
 
     def minimax_max(self, game, depth):
-        """Implement the minimax search algorithm as described in the lectures.
+        """Implement the minimax maximising search algorithm as described in the lectures.
 
               function MAX-VALUE(state) returns a utility value
              if TERMINAL-TEST(state) the return UTILITY(state)
@@ -557,7 +557,7 @@ class CustomPlayer:
         
 
     def alphabeta_min(self, game, depth, alpha, beta):
-        """Implement minimax search with alpha-beta pruning as described in the
+        """Implement minimax search with alpha-beta minimising pruning as described in the
         lectures.
 
          function MIN-VALUE(state, α, β) returns a utility value
@@ -638,7 +638,7 @@ class CustomPlayer:
         return score, move
 
     def alphabeta_max(self, game, depth, alpha, beta):
-        """Implement minimax search with alpha-beta pruning as described in the
+        """Implement minimax search with alpha-beta maximising pruning as described in the
         lectures.
 
          function MIN-VALUE(state, α, β) returns a utility value
